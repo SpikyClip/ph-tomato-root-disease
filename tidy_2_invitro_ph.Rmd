@@ -1,0 +1,85 @@
+---
+title: "Data Cleaning"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+
+```{r, message=FALSE}
+library(tidyverse)
+library(tidyxl)
+library(unpivotr)
+```
+
+```{r}
+path_2 = "data/raw/2_invitro_ph/20190604_ph_response_2.xlsx"
+fusa_cells_2 = xlsx_cells(path_2, sheets = 2)
+pyth_cells_2 = xlsx_cells(path_2, sheets = 3)
+    
+```
+
+```{r}
+fusa_tidy_2 =
+    fusa_cells_2 %>%
+    filter(!is_blank & row <= 73) %>%
+    # Remove unnecessary information
+    filter(!character %in% c("Fusarium Oxysporum", "pH", "Replicate")) %>%
+    behead("up-left", "start_date") %>%
+    behead("up-left", "day") %>%
+    behead("up", "dimension") %>%
+    # Calculate mean and growth rate later
+    filter(!dimension %in% c("Mean (cm)", "Growth rate (cm/day)")) %>%
+    behead("left-up", "ph") %>%
+    behead("left", "replicate") %>%
+    rename(length_cm = numeric) %>%
+    mutate(
+        dimension = recode(dimension, `W (cm)` = "x", `L (cm)` = "y"),
+        day = str_extract(day, r"(\d+)")
+    ) %>%
+    add_column(trial = 2, species = "fusarium_oxysporum") %>%
+    select(start_date,
+           trial,
+           species,
+           ph,
+           replicate,
+           day,
+           dimension,
+           length_cm)
+```
+
+```{r}
+pyth_tidy_2 =
+    pyth_cells_2 %>%
+    filter(!is_blank & row <= 73) %>%
+    # Remove unnecessary information
+    filter(!character %in% c("Pythium irregulare", "pH", "Replicate")) %>%
+    behead("up-left", "start_date") %>%
+    behead("up-left", "day") %>%
+    behead("up", "dimension") %>%
+    # Calculate mean and growth rate later
+    filter(!dimension %in% c("Mean (cm)", "Cm/day")) %>%
+    behead("left-up", "ph") %>%
+    behead("left", "replicate") %>%
+    rename(length_cm = numeric) %>%
+    mutate(
+        dimension = recode(dimension, `W (cm)` = "x", `L (cm)` = "y"),
+        day = str_extract(day, r"(\d+)")
+    ) %>%
+    add_column(trial = 2, species = "pythium_irregulare") %>%
+    select(start_date,
+           trial,
+           species,
+           ph,
+           replicate,
+           day,
+           dimension,
+           length_cm)
+```
+
+```{r}
+path_3 = "data/raw/2_invitro_ph/20190X00_ph_response_3.xlsx"
+```
