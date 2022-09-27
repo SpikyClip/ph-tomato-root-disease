@@ -27,7 +27,6 @@ fusa_tidy_2 =
     fusa_cells_2 %>%
     filter(!is_blank & row <= 73) %>%
     # Remove unnecessary information
-    filter(!character %in% c("Fusarium Oxysporum", "pH", "Replicate")) %>%
     behead("up-left", "start_date") %>%
     behead("up-left", "day") %>%
     behead("up", "dimension") %>%
@@ -38,6 +37,7 @@ fusa_tidy_2 =
     rename(length_cm = numeric) %>%
     mutate(
         dimension = recode(dimension, `W (cm)` = "x", `L (cm)` = "y"),
+        ph = recode(ph, `Control (1)` = "control", `Control (2)` = "control_2"),
         day = str_extract(day, r"(\d+)")
     ) %>%
     add_column(trial = 2, species = "fusarium_oxysporum") %>%
@@ -55,8 +55,6 @@ fusa_tidy_2 =
 pyth_tidy_2 =
     pyth_cells_2 %>%
     filter(!is_blank & row <= 73) %>%
-    # Remove unnecessary information
-    filter(!character %in% c("Pythium irregulare", "pH", "Replicate")) %>%
     behead("up-left", "start_date") %>%
     behead("up-left", "day") %>%
     behead("up", "dimension") %>%
@@ -67,6 +65,7 @@ pyth_tidy_2 =
     rename(length_cm = numeric) %>%
     mutate(
         dimension = recode(dimension, `W (cm)` = "x", `L (cm)` = "y"),
+        ph = recode(ph, `Control (1)` = "control", `Control (2)` = "control_2"),
         day = str_extract(day, r"(\d+)")
     ) %>%
     add_column(trial = 2, species = "pythium_irregulare") %>%
@@ -82,4 +81,45 @@ pyth_tidy_2 =
 
 ```{r}
 path_3 = "data/raw/2_invitro_ph/20190X00_ph_response_3.xlsx"
+
+pyth_cells_3 = lapply(1:5, xlsx_cells, path = path_3)
+```
+
+```{r}
+
+pyth_tidy_3 = list()
+
+for (cells in pyth_cells_3) {
+    tidy = cells %>%
+    filter(!is_blank & row <= 20 & col <= 25) %>%
+    filter(!character %in% c("Species", "Treatment", "Replicate")) %>%
+    behead("up-left", "day") %>%
+    behead("left", "comment") %>%
+    behead("left", "species") %>%
+    behead("left", "ph") %>%
+    behead("left", "replicate") %>%
+    behead("up", dimension) %>%
+    filter(dimension != "Mean") %>%
+    rename(length_cm = numeric, comment = comment.header) %>%
+    mutate(
+        dimension = recode(dimension, W = "x", L = "y"),
+        day = str_extract(day, r"(\d+)"),
+        ph = tolower(str_extract(ph, r"(\d+|Control)"))
+    ) %>%
+    add_column(trial = 3, start_date = NA) %>%
+    select(start_date, 
+           trial,
+           species,
+           ph,
+           replicate,
+           day,
+           dimension,
+           length_cm,
+           comment
+           )
+    
+    pyth_tidy_3 = append(pyth_tidy_3, list(tidy))
+}
+
+pyth_tidy_3 = bind_rows(pyth_tidy_3)
 ```
