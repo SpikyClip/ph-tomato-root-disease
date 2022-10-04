@@ -15,11 +15,32 @@ library(tidyxl)
 library(unpivotr)
 ```
 
+### Load Raw Data
+
 ```{r}
 path_2 = "data/raw/2_invitro_ph/20190604_ph_response_2.xlsx"
+path_3 = "data/raw/2_invitro_ph/20190X00_ph_response_3.xlsx"
+path_4 = "data/raw/2_invitro_ph/20190919_ph_response_4.xlsx"
+path_5 = "data/raw/2_invitro_ph/20190919_ph_response_5.xlsx"
+path_6 = "data/raw/2_invitro_ph/20190925_ph_response_6.xlsx"
+
 fusa_cells_2 = xlsx_cells(path_2, sheets = 2)
 pyth_cells_2 = xlsx_cells(path_2, sheets = 3)
+pyth_cells_3 = lapply(1:5, xlsx_cells, path = path_3)
+pyth_cells_4 = lapply(1:5, xlsx_cells, path = path_4)
+fusa_cells_5 = xlsx_cells(path_5)
+pyth_cells_6 = xlsx_cells(path_6)
+
+# Initialise df lists for later
+pyth_tidy_3 = list()
+pyth_tidy_4 = list()
 ```
+
+### Tidy Data
+
+Normally, I would try to avoid repetition and use a function, however all the 
+datasets vary slightly so it was easier to copy+paste than write a function 
+that could deal with all the format variations
 
 ```{r}
 fusa_tidy_2 =
@@ -33,11 +54,7 @@ fusa_tidy_2 =
     behead("left-up", "ph") %>%
     behead("left", "replicate") %>%
     rename(length_cm = numeric) %>%
-    mutate(
-        dimension = recode(dimension, `W (cm)` = "x", `L (cm)` = "y"),
-        ph = recode(ph, `Control (1)` = "control", `Control (2)` = "control_2"),
-        day = str_extract(day, r"(\d+)")
-    ) %>%
+    mutate(dimension = recode(dimension, `W (cm)` = "x", `L (cm)` = "y")) %>%
     add_column(trial = 2,
                species = "fusarium_oxysporum") %>%
     pivot_wider(
@@ -55,16 +72,11 @@ pyth_tidy_2 =
     behead("up-left", "start_date") %>%
     behead("up-left", "day") %>%
     behead("up", "dimension") %>%
-    # Calculate mean and growth rate later
     filter(!dimension %in% c("Mean (cm)", "Cm/day")) %>%
     behead("left-up", "ph") %>%
     behead("left", "replicate") %>%
     rename(length_cm = numeric) %>%
-    mutate(
-        dimension = recode(dimension, `W (cm)` = "x", `L (cm)` = "y"),
-        ph = recode(ph, `Control (1)` = "control", `Control (2)` = "control_2"),
-        day = str_extract(day, r"(\d+)")
-    ) %>%
+    mutate(dimension = recode(dimension, `W (cm)` = "x", `L (cm)` = "y")) %>%
     add_column(trial = 2,
                species = "pythium_irregulare") %>%
     pivot_wider(
@@ -76,38 +88,26 @@ pyth_tidy_2 =
 ```
 
 ```{r}
-path_3 = "data/raw/2_invitro_ph/20190X00_ph_response_3.xlsx"
-
-pyth_cells_3 = lapply(1:5, xlsx_cells, path = path_3)
-```
-
-```{r}
-
-pyth_tidy_3 = list()
-
+# Loop through sheets and tidy
 for (cells in pyth_cells_3) {
     tidy = cells %>%
-    filter(!is_blank & row <= 20 & col <= 25) %>%
-    behead("up-left", "day") %>%
-    behead("left", "comment") %>%
-    behead("left", "species") %>%
-    behead("left", "ph") %>%
-    behead("left", "replicate") %>%
-    behead("up", "dimension") %>%
-    filter(dimension != "Mean") %>%
-    rename(length_cm = numeric, comment = comment.header) %>%
-    mutate(
-        dimension = recode(dimension, W = "x", L = "y"),
-        day = str_extract(day, r"(\d+)"),
-        ph = tolower(str_extract(ph, r"(\d+|Control)"))
-    ) %>%
-    add_column(trial = 3, start_date = NA) %>%
-    pivot_wider(
-        id_cols = c(start_date, trial, species, ph, replicate, day, comment),
-        names_from = dimension,
-        values_from = length_cm,
-        names_sort = TRUE
-    )
+        filter(!is_blank & row <= 20 & col <= 25) %>%
+        behead("up-left", "day") %>%
+        behead("left", "comment") %>%
+        behead("left", "species") %>%
+        behead("left", "ph") %>%
+        behead("left", "replicate") %>%
+        behead("up", "dimension") %>%
+        filter(dimension != "Mean") %>%
+        rename(length_cm = numeric, comment = comment.header) %>%
+        mutate(dimension = recode(dimension, W = "x", L = "y")) %>%
+        add_column(trial = 3, start_date = NA) %>%
+        pivot_wider(
+            id_cols = c(start_date, trial, species, ph, replicate, day, comment),
+            names_from = dimension,
+            values_from = length_cm,
+            names_sort = TRUE
+        )
     pyth_tidy_3 = append(pyth_tidy_3, list(tidy))
 }
 
@@ -115,37 +115,26 @@ pyth_tidy_3 = bind_rows(pyth_tidy_3)
 ```
 
 ```{r}
-path_4 = "data/raw/2_invitro_ph/20190919_ph_response_4.xlsx"
-
-pyth_cells_4 = lapply(1:5, xlsx_cells, path = path_4)
-```
-
-```{r}
-pyth_tidy_4 = list()
-
+# Loop through sheets and tidy
 for (cells in pyth_cells_4) {
     tidy = cells %>%
-    filter(!is_blank) %>%
-    behead("up-left", "day") %>%
-    behead("left", "comment") %>%
-    behead("left", "species") %>%
-    behead("left", "ph") %>%
-    behead("left", "replicate") %>%
-    behead("up", "dimension") %>%
-    filter(dimension != "Mean") %>%
-    rename(length_cm = numeric, comment = comment.header) %>%
-    mutate(
-        dimension = recode(dimension, W = "x", L = "y"),
-        day = str_extract(day, r"(\d+)"),
-        ph = tolower(str_extract(ph, r"(\d+|Control)"))
-    ) %>%
-    add_column(trial = 4, start_date = "19/09/2019") %>%
-    pivot_wider(
-        id_cols = c(start_date, trial, species, ph, replicate, day, comment),
-        names_from = dimension,
-        values_from = length_cm,
-        names_sort = TRUE
-    )
+        filter(!is_blank) %>%
+        behead("up-left", "day") %>%
+        behead("left", "comment") %>%
+        behead("left", "species") %>%
+        behead("left", "ph") %>%
+        behead("left", "replicate") %>%
+        behead("up", "dimension") %>%
+        filter(dimension != "Mean") %>%
+        rename(length_cm = numeric, comment = comment.header) %>%
+        mutate(dimension = recode(dimension, W = "x", L = "y")) %>%
+        add_column(trial = 4, start_date = "2019-09-19") %>%
+        pivot_wider(
+            id_cols = c(start_date, trial, species, ph, replicate, day, comment),
+            names_from = dimension,
+            values_from = length_cm,
+            names_sort = TRUE
+        )
     pyth_tidy_4 = append(pyth_tidy_4, list(tidy))
 }
 
@@ -153,13 +142,7 @@ pyth_tidy_4 = bind_rows(pyth_tidy_4)
 ```
 
 ```{r}
-path_5 = "data/raw/2_invitro_ph/20190919_ph_response_5.xlsx"
-
-fusa_cells_5 = xlsx_cells(path_5)
-```
-
-```{r}
-fusa_tidy_5 = 
+fusa_tidy_5 =
     fusa_cells_5 %>%
     filter(!is_blank) %>%
     behead("up-left", "day") %>%
@@ -170,25 +153,14 @@ fusa_tidy_5 =
     behead("up", "dimension") %>%
     filter(dimension != "Mean") %>%
     rename(length_cm = numeric, comment = comment.header) %>%
-    mutate(
-        dimension = recode(dimension, W = "x", L = "y"),
-        day = str_extract(day, r"(\d+)"),
-        # Avoided regex here as the 'control' level was not matching
-        ph = replace(ph, ph == "5.5 (Control)", "control")
-    ) %>%
-    add_column(trial = 5, start_date = "19/09/2019") %>%
+    mutate(dimension = recode(dimension, W = "x", L = "y")) %>%
+    add_column(trial = 5, start_date = "2019-09-19") %>%
     pivot_wider(
         id_cols = c(start_date, trial, species, ph, replicate, day, comment),
         names_from = dimension,
         values_from = length_cm,
         names_sort = TRUE
     )
-```
-
-```{r}
-path_6 = "data/raw/2_invitro_ph/20190925_ph_response_6.xlsx"
-
-pyth_cells_6 = xlsx_cells(path_6)
 ```
 
 ```{r}
@@ -203,11 +175,8 @@ pyth_tidy_6 =
     behead("up", "dimension") %>%
     filter(dimension != "Mean") %>%
     rename(length_cm = numeric, comment = comment.header) %>%
-    mutate(
-        dimension = recode(dimension, W = "x", L = "y"),
-        day = str_extract(day, r"(\d+)"),
-    ) %>%
-    add_column(trial = 5, start_date = "25/09/2019") %>%
+    mutate(dimension = recode(dimension, W = "x", L = "y")) %>%
+    add_column(trial = 5, start_date = "2019-09-25") %>%
     pivot_wider(
         id_cols = c(start_date, trial, species, ph, replicate, day, comment),
         names_from = dimension,
@@ -215,3 +184,63 @@ pyth_tidy_6 =
         names_sort = TRUE
     )
 ```
+
+### Clean Data
+
+Convert `start_date` to dates, `day` and `replicate` to numeric, standardise 
+`species` name to form `genus_species`, strip `pH` from `ph`. Bind all datasets
+into one and save.
+
+```{r}
+dirty_datasets = list(
+    fusa_tidy_2,
+    pyth_tidy_2,
+    pyth_tidy_3,
+    pyth_tidy_4,
+    fusa_tidy_5,
+    pyth_tidy_6
+    )
+
+clean_datasets = list()
+
+for (dataset in dirty_datasets) {
+    clean_dataset =
+        dataset %>%
+        mutate(
+            start_date = as.Date(start_date),
+            day = as.numeric(str_extract(day, r"(\d+)")),
+            replicate = as.numeric(replicate),
+            species = str_replace_all(species,
+                                      c(
+                                          r"(P\. )" = "pythium_",
+                                          r"(\. )" = "_",
+                                          r"( )" = "_"
+                                      )) %>% tolower(),
+            ph = str_replace_all(
+                ph,
+                c(
+                    r"(Control \(1\))" = "control",
+                    r"(Control \(2\))" = "control_2",
+                    r"(5.5 \(Control\))" = "control",
+                    r"(Control)" = "control",
+                    r"(pH )" = ""
+                )
+            ),
+            comment = str_replace(comment, r"([Cc]ontam.*)", "contaminated")
+        ) %>%
+        list()
+    clean_datasets = append(clean_datasets, clean_dataset)
+}
+
+ph_resp = bind_rows(clean_datasets)
+# Save
+ph_resp %>% write_csv("data/processed/ph_response_clean.csv")
+```
+
+### Clean Environment
+
+```{r}
+rm(list=setdiff(ls(), "ph_resp"))
+```
+
+## Exploratory Data Analysis
