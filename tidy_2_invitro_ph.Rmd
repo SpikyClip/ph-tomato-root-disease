@@ -19,14 +19,12 @@ library(unpivotr)
 path_2 = "data/raw/2_invitro_ph/20190604_ph_response_2.xlsx"
 fusa_cells_2 = xlsx_cells(path_2, sheets = 2)
 pyth_cells_2 = xlsx_cells(path_2, sheets = 3)
-    
 ```
 
 ```{r}
 fusa_tidy_2 =
     fusa_cells_2 %>%
     filter(!is_blank & row <= 73) %>%
-    # Remove unnecessary information
     behead("up-left", "start_date") %>%
     behead("up-left", "day") %>%
     behead("up", "dimension") %>%
@@ -152,4 +150,68 @@ for (cells in pyth_cells_4) {
 }
 
 pyth_tidy_4 = bind_rows(pyth_tidy_4)
+```
+
+```{r}
+path_5 = "data/raw/2_invitro_ph/20190919_ph_response_5.xlsx"
+
+fusa_cells_5 = xlsx_cells(path_5)
+```
+
+```{r}
+fusa_tidy_5 = 
+    fusa_cells_5 %>%
+    filter(!is_blank) %>%
+    behead("up-left", "day") %>%
+    behead("left", "comment") %>%
+    behead("left", "species") %>%
+    behead("left", "ph") %>%
+    behead("left", "replicate") %>%
+    behead("up", "dimension") %>%
+    filter(dimension != "Mean") %>%
+    rename(length_cm = numeric, comment = comment.header) %>%
+    mutate(
+        dimension = recode(dimension, W = "x", L = "y"),
+        day = str_extract(day, r"(\d+)"),
+        # Avoided regex here as the 'control' level was not matching
+        ph = replace(ph, ph == "5.5 (Control)", "control")
+    ) %>%
+    add_column(trial = 5, start_date = "19/09/2019") %>%
+    pivot_wider(
+        id_cols = c(start_date, trial, species, ph, replicate, day, comment),
+        names_from = dimension,
+        values_from = length_cm,
+        names_sort = TRUE
+    )
+```
+
+```{r}
+path_6 = "data/raw/2_invitro_ph/20190925_ph_response_6.xlsx"
+
+pyth_cells_6 = xlsx_cells(path_6)
+```
+
+```{r}
+pyth_tidy_6 =
+    pyth_cells_6 %>%
+    filter(!is_blank) %>%
+    behead("up-left", "day") %>%
+    behead("left", "comment") %>%
+    behead("left", "species") %>%
+    behead("left", "ph") %>%
+    behead("left", "replicate") %>%
+    behead("up", "dimension") %>%
+    filter(dimension != "Mean") %>%
+    rename(length_cm = numeric, comment = comment.header) %>%
+    mutate(
+        dimension = recode(dimension, W = "x", L = "y"),
+        day = str_extract(day, r"(\d+)"),
+    ) %>%
+    add_column(trial = 5, start_date = "25/09/2019") %>%
+    pivot_wider(
+        id_cols = c(start_date, trial, species, ph, replicate, day, comment),
+        names_from = dimension,
+        values_from = length_cm,
+        names_sort = TRUE
+    )
 ```
