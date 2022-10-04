@@ -90,13 +90,12 @@ pyth_tidy_3 = list()
 for (cells in pyth_cells_3) {
     tidy = cells %>%
     filter(!is_blank & row <= 20 & col <= 25) %>%
-    filter(!character %in% c("Species", "Treatment", "Replicate")) %>%
     behead("up-left", "day") %>%
     behead("left", "comment") %>%
     behead("left", "species") %>%
     behead("left", "ph") %>%
     behead("left", "replicate") %>%
-    behead("up", dimension) %>%
+    behead("up", "dimension") %>%
     filter(dimension != "Mean") %>%
     rename(length_cm = numeric, comment = comment.header) %>%
     mutate(
@@ -115,4 +114,42 @@ for (cells in pyth_cells_3) {
 }
 
 pyth_tidy_3 = bind_rows(pyth_tidy_3)
+```
+
+```{r}
+path_4 = "data/raw/2_invitro_ph/20190919_ph_response_4.xlsx"
+
+pyth_cells_4 = lapply(1:5, xlsx_cells, path = path_4)
+```
+
+```{r}
+pyth_tidy_4 = list()
+
+for (cells in pyth_cells_4) {
+    tidy = cells %>%
+    filter(!is_blank) %>%
+    behead("up-left", "day") %>%
+    behead("left", "comment") %>%
+    behead("left", "species") %>%
+    behead("left", "ph") %>%
+    behead("left", "replicate") %>%
+    behead("up", "dimension") %>%
+    filter(dimension != "Mean") %>%
+    rename(length_cm = numeric, comment = comment.header) %>%
+    mutate(
+        dimension = recode(dimension, W = "x", L = "y"),
+        day = str_extract(day, r"(\d+)"),
+        ph = tolower(str_extract(ph, r"(\d+|Control)"))
+    ) %>%
+    add_column(trial = 4, start_date = "19/09/2019") %>%
+    pivot_wider(
+        id_cols = c(start_date, trial, species, ph, replicate, day, comment),
+        names_from = dimension,
+        values_from = length_cm,
+        names_sort = TRUE
+    )
+    pyth_tidy_4 = append(pyth_tidy_4, list(tidy))
+}
+
+pyth_tidy_4 = bind_rows(pyth_tidy_4)
 ```
