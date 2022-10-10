@@ -4,7 +4,7 @@ output: github_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, dpi = 300, fig.width = 7)
 ```
 
 ## Setup
@@ -13,19 +13,28 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(tidyxl)
 library(unpivotr)
+library(ggpubr)
+
+library(hrbrthemes)
+library(showtext)
+
+font_add("IBMPlexSans", regular = "IBMPlexSans-Regular.ttf")
+font_add("IBMPlexSans-Bold", regular = "IBMPlexSans-Bold.ttf")
+font_add("IBMPlexSans-Medium", regular = "IBMPlexSans-Medium.ttf")
+showtext_auto()
 ```
 
 ### Load Raw Data
 
 ```{r}
-path_2 = "data/raw/2_invitro_ph/20190604_ph_response_2.xlsx"
+# path_2 = "data/raw/2_invitro_ph/20190604_ph_response_2.xlsx"
 path_3 = "data/raw/2_invitro_ph/20190X00_ph_response_3.xlsx"
 path_4 = "data/raw/2_invitro_ph/20190919_ph_response_4.xlsx"
 path_5 = "data/raw/2_invitro_ph/20190919_ph_response_5.xlsx"
 path_6 = "data/raw/2_invitro_ph/20190925_ph_response_6.xlsx"
 
-fusa_cells_2 = xlsx_cells(path_2, sheets = 2)
-pyth_cells_2 = xlsx_cells(path_2, sheets = 3)
+# fusa_cells_2 = xlsx_cells(path_2, sheets = 2)
+# pyth_cells_2 = xlsx_cells(path_2, sheets = 3)
 pyth_cells_3 = lapply(1:5, xlsx_cells, path = path_3)
 pyth_cells_4 = lapply(1:5, xlsx_cells, path = path_4)
 fusa_cells_5 = xlsx_cells(path_5)
@@ -41,51 +50,6 @@ pyth_tidy_4 = list()
 Normally, I would try to avoid repetition and use a function, however all the 
 datasets vary slightly so it was easier to copy+paste than write a function 
 that could deal with all the format variations
-
-```{r}
-fusa_tidy_2 =
-    fusa_cells_2 %>%
-    filter(!is_blank & row <= 73) %>%
-    behead("up-left", "start_date") %>%
-    behead("up-left", "day") %>%
-    behead("up", "dimension") %>%
-    # Calculate mean and growth rate later
-    filter(!dimension %in% c("Mean (cm)", "Growth rate (cm/day)")) %>%
-    behead("left-up", "ph") %>%
-    behead("left", "replicate") %>%
-    rename(length_cm = numeric) %>%
-    mutate(dimension = recode(dimension, `W (cm)` = "x", `L (cm)` = "y")) %>%
-    add_column(trial = 2,
-               species = "fusarium_oxysporum") %>%
-    pivot_wider(
-        id_cols = c(start_date, trial, species, ph, replicate, day, comment),
-        names_from = dimension,
-        values_from = length_cm,
-        names_sort = TRUE
-    )
-```
-
-```{r}
-pyth_tidy_2 =
-    pyth_cells_2 %>%
-    filter(!is_blank & row <= 73) %>%
-    behead("up-left", "start_date") %>%
-    behead("up-left", "day") %>%
-    behead("up", "dimension") %>%
-    filter(!dimension %in% c("Mean (cm)", "Cm/day")) %>%
-    behead("left-up", "ph") %>%
-    behead("left", "replicate") %>%
-    rename(length_cm = numeric) %>%
-    mutate(dimension = recode(dimension, `W (cm)` = "x", `L (cm)` = "y")) %>%
-    add_column(trial = 2,
-               species = "pythium_irregulare") %>%
-    pivot_wider(
-        id_cols = c(start_date, trial, species, ph, replicate, day, comment),
-        names_from = dimension,
-        values_from = length_cm,
-        names_sort = TRUE
-    )
-```
 
 ```{r}
 # Loop through sheets and tidy
@@ -193,8 +157,6 @@ into one and save.
 
 ```{r}
 dirty_datasets = list(
-    fusa_tidy_2,
-    pyth_tidy_2,
     pyth_tidy_3,
     pyth_tidy_4,
     fusa_tidy_5,
@@ -219,22 +181,30 @@ for (dataset in dirty_datasets) {
             ph = str_replace_all(
                 ph,
                 c(
-                    r"(Control \(1\))" = "control",
-                    r"(Control \(2\))" = "control_2",
-                    r"(5.5 \(Control\))" = "control",
-                    r"(Control)" = "control",
+                    r"(5.5 \(Control\))" = "5.5",
+                    r"(Control)" = "5.5",
                     r"(pH )" = ""
                 )
-            ),
+            ) %>% as.numeric(),
             comment = str_replace(comment, r"([Cc]ontam.*)", "contaminated")
         ) %>%
         list()
     clean_datasets = append(clean_datasets, clean_dataset)
 }
 
-ph_resp = bind_rows(clean_datasets)
-# Save
-ph_resp %>% write_csv("data/processed/ph_response_clean.csv")
+ph_resp = 
+    # bind datasets
+    clean_datasets %>%
+    bind_rows() %>%
+    # Create unique ID for each biological replicate
+    group_by(trial, species, ph, replicate) %>%
+    # Add mean width and growth rate
+    mutate(
+        mean_width_cm = ave(x, y) %>% round(2),
+        growth_rate_cm_day = ((mean_width_cm - 0.4)/day) %>% round(2),
+        plate_id = cur_group_id()
+    ) %>%
+    select(plate_id, everything())
 ```
 
 ### Clean Environment
@@ -244,3 +214,68 @@ rm(list=setdiff(ls(), "ph_resp"))
 ```
 
 ## Exploratory Data Analysis
+
+```{r}
+ph_resp_format = 
+    ph_resp %>%
+    # Take out dead/contaminated samples and redundant control 2
+    filter(!comment %in% c("dead", "contaminated") & ph != "control_2") %>%
+    # Format column names for printing to avoid formatting for every graph
+    rename_with(str_to_title) %>%
+    rename(
+    "Start Date" = "Start_date",
+    "Mean Width (cm)" = "Mean_width_cm",
+    "Growth Rate (cm/day)" = "Growth_rate_cm_day"
+    ) %>%
+    rename("pH" = "Ph") %>%
+    # Format species names for printing
+    mutate(
+        Species = str_replace_all(
+            Species, c(r"(pythium_)" = "P. ",r"(fusarium_)" = "F. ")
+        )
+    )
+
+ph_resp_format %>%
+    ggplot(mapping = aes(x = Day, y = `Mean Width (cm)`, color = as.factor(pH)), size = 1) +
+        geom_jitter(alpha = 0.3) +
+        geom_smooth(method = "lm", linetype = "dashed") +
+        facet_wrap(~Species, nrow = 2) +
+        theme_ipsum_ps() +
+        ggtitle("Test")
+```
+
+```{r}
+ph_resp_format %>%
+    group_by(Species, pH, Day) %>%
+    summarise(n()) %>%
+    filter(Day == 1)
+
+ph_resp_format %>%
+    group_by(Trial, Species, pH, Replicate) %>%
+    filter(Day == max(Day)) %>%
+    ggplot(
+        mapping = aes(
+            x = pH,
+            y = `Growth Rate (cm/day)`,
+            color = Species,
+            group = Species
+            )
+        ) +
+    geom_jitter(height = 0, width = 0.1) +
+    geom_smooth()
+```
+
+```{r}
+shapiro.test(ph_resp$growth_rate_cm_day)
+
+ph_resp$growth_rate_cm_day %>%
+    ggqqplot()
+
+# model = lm(
+#     data = ph_resp_format,
+#     formula = `Mean Width (cm)` ~ Day + pH + Species + Replicate + Trial
+#     )
+# 
+# summary(model)
+# anova(model, test = "F")
+```
