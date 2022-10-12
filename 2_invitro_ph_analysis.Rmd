@@ -1,13 +1,53 @@
 ---
-title: "Data Cleaning"
+title: "The Effects of pH on the in-vitro Growth of Four Fungal Pathogens of Processing Tomato"
 output: github_document
+author: "Vikesh Ajith"
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, dpi = 300, fig.width = 7)
 ```
 
-## Setup
+## Introduction
+
+### Background
+
+This notebook revisits the data from my first experiment in my 2019 Honours
+thesis, "The effects of soil pH on infection of tomato by **Fusarium oxysporum**
+(crown and root rot) and **Pythium spp.**". It is an informal analysis meant to
+present how I would analyse this data today given my knowledge of programming
+(The original analyses were done in Minitab).
+
+Processing tomato farmers in Echuca-Moama (NSW/VIC) noticed that yields were
+declining due to soilborne disease in fields where sub-surface drip irrigation
+tubes had remained for a long period of time. This has been associated with
+increased acidity in the soil surrounding the tubes. One possible hypothesis is
+that the acidity promotes the growth of of soilborne pathogens, worsening
+disease.
+
+### Experimental Aims
+
+The aim of this experiment was to investigate the effects of pH on the growth
+rates of four known fungal pathogens of processing tomato (Fusarium oxysporum,
+Pythium irregulare, Pythium catenulatum, and Pythium recalcitrans) in an
+in-vitro medium (Potato Dextrose Agar)
+
+### Methodology
+
+Petri plates of PDA were prepared at 6 pH levels (4, 5, 5.5, 6, 7, 8) using HCl
+and NaOH. These were inoculated with a 0.4mm plug of fungal culture, and culture
+diameter was measured every 24 hours until the entire plate was colonised (up to
+7 days).
+
+Growth rates were calculated using the following formula: 
+`(mean_width_cm -0.4)/day`. The growth rates used in the analysis were selected 
+from the last day of growth common to all cultures within the species (This was 
+to account for possible bias as some replicates took one day longer to fully 
+colonise the plate).
+
+## Data Cleaning
+
+### Setup
 
 ```{r, message=FALSE}
 library(tidyverse)
@@ -17,24 +57,24 @@ library(ggpubr)
 
 library(hrbrthemes)
 library(showtext)
+library(scales)
 
 font_add("IBMPlexSans", regular = "IBMPlexSans-Regular.ttf")
 font_add("IBMPlexSans-Bold", regular = "IBMPlexSans-Bold.ttf")
 font_add("IBMPlexSans-Medium", regular = "IBMPlexSans-Medium.ttf")
 showtext_auto()
+theme_set(theme_ipsum_ps(grid = "Yy", axis = T, ticks = F))
 ```
 
 ### Load Raw Data
 
 ```{r}
-# path_2 = "data/raw/2_invitro_ph/20190604_ph_response_2.xlsx"
 path_3 = "data/raw/2_invitro_ph/20190X00_ph_response_3.xlsx"
 path_4 = "data/raw/2_invitro_ph/20190919_ph_response_4.xlsx"
 path_5 = "data/raw/2_invitro_ph/20190919_ph_response_5.xlsx"
 path_6 = "data/raw/2_invitro_ph/20190925_ph_response_6.xlsx"
 
-# fusa_cells_2 = xlsx_cells(path_2, sheets = 2)
-# pyth_cells_2 = xlsx_cells(path_2, sheets = 3)
+# Extract sheets
 pyth_cells_3 = lapply(1:5, xlsx_cells, path = path_3)
 pyth_cells_4 = lapply(1:5, xlsx_cells, path = path_4)
 fusa_cells_5 = xlsx_cells(path_5)
@@ -49,7 +89,7 @@ pyth_tidy_4 = list()
 
 Normally, I would try to avoid repetition and use a function, however all the 
 datasets vary slightly so it was easier to copy+paste than write a function 
-that could deal with all the format variations
+that could deal with all the format variations.
 
 ```{r}
 # Loop through sheets and tidy
@@ -215,6 +255,12 @@ rm(list=setdiff(ls(), "ph_resp"))
 
 ## Exploratory Data Analysis
 
+### Generate Formatted Data
+
+Rather than formatting data labels and axes for every graph, it was more 
+convenient to just format the data itself. Dead and contaminated cultures were
+also filtered.
+
 ```{r}
 ph_resp_format = 
     ph_resp %>%
@@ -225,23 +271,145 @@ ph_resp_format =
     rename(
     "Start Date" = "Start_date",
     "Mean Width (cm)" = "Mean_width_cm",
-    "Growth Rate (cm/day)" = "Growth_rate_cm_day"
+    "Growth Rate (cm/day)" = "Growth_rate_cm_day",
+    "pH" = "Ph",
+    "Plate ID" = "Plate_id"
     ) %>%
-    rename("pH" = "Ph") %>%
     # Format species names for printing
     mutate(
         Species = str_replace_all(
             Species, c(r"(pythium_)" = "P. ",r"(fusarium_)" = "F. ")
         )
     )
+```
+
+### Summarise Data
+
+First, lets take a look at the number of biological replicates below. 10 were
+planned for each group, but there were some contamination and losses, most
+notably for **P. recalcitrans** which had a tendency to contaminate easily. For
+that species, some groups had 11 biological replicates as more were prepared to
+account for potential losses.
+
+```{r, message=FALSE}
+# Take a look at the number of biological replicates per treatment
+ph_resp_format %>%
+    group_by(Species, pH, Day) %>%
+    filter(Day == 1) %>%
+    summarise(n = n()) %>%
+    pivot_wider(names_from = Species, values_from = n) %>%
+    select(!Day)
+```
+Next, lets determine the final cut-off day for each species. We can see from the
+table and bar graph below that all cultures were growing till day 7, 4, 2, and 4
+for the species F. oxysporum, P. catenulatum, P. irregulare, and P.
+recalcitrans, respectively.
+
+```{r, message=FALSE}
+ph_resp_format %>%
+    group_by(Species, Day) %>%
+    summarise(n = n()) %>%
+    pivot_wider(names_from = Day, values_from = n)
 
 ph_resp_format %>%
-    ggplot(mapping = aes(x = Day, y = `Mean Width (cm)`, color = as.factor(pH)), size = 1) +
-        geom_jitter(alpha = 0.3) +
-        geom_smooth(method = "lm", linetype = "dashed") +
-        facet_wrap(~Species, nrow = 2) +
-        theme_ipsum_ps() +
-        ggtitle("Test")
+    group_by(Species, Day) %>%
+    summarise(n = n()) %>%
+    ggplot(mapping = aes(x = Day, y = n)) +
+        geom_bar(stat = "identity") +
+        facet_wrap(~Species)
+```
+### Get Cut-off Data
+
+```{r}
+ph_resp_cut =
+    ph_resp_format %>%
+        filter(
+            Species == "F. oxysporum" & Day == 7 |
+            Species == "P. catenulatum" & Day == 4 |
+            Species == "P. irregulare" & Day == 2 |
+            Species == "P. recalcitrans" & Day == 4
+        )
+```
+
+### Define pH scale colors
+
+```{r}
+ph_scale_fill = scale_fill_stepsn(
+        colours = c(
+            "red",
+            "orange",
+            "yellow",
+            "greenyellow",
+            "green4",
+            "turquoise"
+            ),
+        n.breaks = 7
+        )
+
+ph_scale_color = scale_color_stepsn(
+        colours = c(
+            "red",
+            "orange",
+            "yellow",
+            "greenyellow",
+            "green4",
+            "turquoise"
+            ),
+        n.breaks = 7
+        )
+```
+
+### Bar Confidence Interval Plot
+
+```{r}
+ph_resp_cut %>%
+    desc_statby(
+        measure.var = "Growth Rate (cm/day)",
+        grps = c("Species", "pH")
+    ) %>%
+    rename(`Mean Growth Rate (cm/day)` = mean) %>%
+    ggplot(aes(
+            x = pH,
+            y = `Mean Growth Rate (cm/day)`,
+            fill = pH
+            )) +
+    geom_bar(
+        position = "dodge",
+        stat = "identity"
+        ) +
+    geom_errorbar(
+        aes(
+            ymin = `Mean Growth Rate (cm/day)` - ci, 
+            ymax = `Mean Growth Rate (cm/day)` + ci
+            ),
+        color = "gray65"
+        ) +
+    facet_wrap(~Species) +
+    ph_scale_fill
+```
+
+```{r}
+ph_resp_format %>%
+    ggplot(
+        aes(
+            x = Day,
+            y = `Mean Width (cm)`,
+            color = pH,
+            group = pH
+            ),
+        size = 1
+        ) +
+        geom_jitter(height = 0, width = 0.1) +
+        geom_smooth(method = "lm", linetype = "solid", size = 0.3, se = F) +
+        ph_scale_color +
+        facet_wrap(~Species, nrow = 2)
+```
+```{r}
+ph_resp_cut %>%
+    ggplot(aes(x = pH, y = `Growth Rate (cm/day)`, group = Species), size = 1) +
+    geom_jitter(height = 0, width = 0.1) +
+    geom_smooth(linetype = "solid", size = 0.3) +
+    ph_scale_color
 ```
 
 ```{r}
@@ -250,26 +418,32 @@ ph_resp_format %>%
     summarise(n()) %>%
     filter(Day == 1)
 
+# ph_resp_format %>%
+#     group_by(Trial, Species, pH, Replicate) %>%
+#     filter(Day == max(Day)) %>%
+
 ph_resp_format %>%
-    group_by(Trial, Species, pH, Replicate) %>%
-    filter(Day == max(Day)) %>%
-    ggplot(
-        mapping = aes(
-            x = pH,
-            y = `Growth Rate (cm/day)`,
-            color = Species,
-            group = Species
-            )
-        ) +
-    geom_jitter(height = 0, width = 0.1) +
-    geom_smooth()
+    group_by(Day) %>%
+    View()
+
+    # ggplot(
+    #     mapping = aes(
+    #         x = pH,
+    #         y = `Growth Rate (cm/day)`,
+    #         color = Species,
+    #         group = Species,
+    #         label = `Plate ID`
+    #         )
+    #     ) +
+    # geom_jitter(height = 0, width = 0.1) +
+    # geom_smooth() +
+    # geom_label()
 ```
 
 ```{r}
-shapiro.test(ph_resp$growth_rate_cm_day)
-
-ph_resp$growth_rate_cm_day %>%
-    ggqqplot()
+ph_resp_format %>%
+    ggqqplot(x = "Growth Rate (cm/day)") +
+    facet_wrap(~Species)
 
 # model = lm(
 #     data = ph_resp_format,
